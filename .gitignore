@@ -50,6 +50,7 @@ android/local.properties
 
 # Build Packages & Binaries
 *.apk
+!web/lpc-pickleball.apk
 *.aab
 *.dex
 

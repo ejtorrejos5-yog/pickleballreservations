@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../providers/auth_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../home/home_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -45,6 +46,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
 
     if (mounted) setState(() => _isSubmitting = false);
+
+    if (success && mounted) {
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      } else {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const HomeScreen()),
+        );
+      }
+      return;
+    }
 
     if (!success && mounted) {
       final msg = provider.error ?? 'Registration failed';
