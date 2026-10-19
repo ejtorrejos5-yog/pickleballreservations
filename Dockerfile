@@ -2,8 +2,7 @@
 # Multi-stage Dockerfile for Flutter Web on Render
 # ==========================================
 
-# Stage 1: Build Flutter Web
-FROM ghcr.io/cirruslabs/flutter:stable AS build
+FROM ghcr.io/cirruslabs/flutter:3.24.5 AS build
 
 WORKDIR /app
 
