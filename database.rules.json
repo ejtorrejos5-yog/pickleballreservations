@@ -1,0 +1,30 @@
+{
+  "rules": {
+    "court_status": {
+      ".read": true,
+      ".write": true
+    },
+    "lcd_override": {
+      ".read": true,
+      ".write": true
+    },
+    "lcd_command": {
+      ".read": true,
+      ".write": true
+    },
+    "lcd_log": {
+      ".read": true,
+      ".write": true
+    },
+    "arduino_status": {
+      ".read": true,
+      ".write": true
+    },
+    "active_lcd_target": {
+      ".read": true,
+      ".write": true
+    },
+    ".read": "auth != null",
+    ".write": "auth != null"
+  }
+}

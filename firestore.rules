@@ -1,0 +1,48 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper function to check admin role safely
+    function isAdmin() {
+      return request.auth != null &&
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // ── Users ────────────────────────────────────────────────────────────────
+    match /users/{uid} {
+      // Any authenticated user can create their own profile
+      allow create: if isAuthenticated() && request.auth.uid == uid;
+      // Users can read/write their own doc; admins can read all
+      allow read, write: if isAuthenticated() && request.auth.uid == uid;
+      allow read, write: if isAdmin();
+    }
+
+    // ── Courts ───────────────────────────────────────────────────────────────
+    match /courts/{courtId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // ── Reservations ─────────────────────────────────────────────────────────
+    match /reservations/{resId} {
+      // All authenticated users can read reservations to view court schedule & check availability
+      allow read: if isAuthenticated();
+      // Any logged-in user can create a reservation
+      allow create: if isAuthenticated();
+      // Users can update/delete their own reservations; admins can update/delete any
+      allow update, delete: if isAuthenticated() &&
+                               (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    // ── Tournaments ──────────────────────────────────────────────────────────
+    match /tournaments/{tourId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+  }
+}

@@ -1,0 +1,47 @@
+name: pickleballreservation
+description: "IoT-Based Pickleball Reservation System"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.5.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+  # Firebase
+  firebase_core: ^3.0.0
+  firebase_auth: ^5.0.0
+  cloud_firestore: ^5.0.0
+  firebase_database: ^11.0.0
+
+  # State Management
+  provider: ^6.1.2
+
+  # UI & Fonts
+  google_fonts: ^6.2.1
+  flutter_animate: ^4.5.0
+
+  # Utilities
+  intl: ^0.19.0
+  table_calendar: ^3.1.2
+  uuid: ^4.4.0
+  http: ^1.6.0
+  url_launcher: ^6.3.1
+  mobile_scanner: ^6.0.11
+  image_picker: ^1.1.2
+  qr_code_dart_decoder: ^0.3.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
