@@ -42,6 +42,7 @@ class AppConstants {
 
   // ─── Tournament ──────────────────────────────────────────────────────────────
   static const String formatSingleElimination = 'single_elimination';
+  static const String formatQualifyingRounds = 'qualifying_rounds';
   static const String tournamentUpcoming = 'upcoming';
   static const String tournamentOngoing = 'ongoing';
   static const String tournamentCompleted = 'completed';

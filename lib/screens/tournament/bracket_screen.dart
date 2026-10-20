@@ -146,6 +146,59 @@ class _BracketScreenState extends State<BracketScreen> {
                   ),
                 ),
               ),
+            if (tournament.isQualifyingFormat && !tournament.hasPlayoffs)
+              Container(
+                margin: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppTheme.primary.withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.military_tech_rounded,
+                        color: AppTheme.primary, size: 20),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Stage 1: Qualifying Rounds Active',
+                            style: TextStyle(
+                              color: AppTheme.primary,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          Text(
+                            'Top 8 players will advance to Quarter-Finals.',
+                            style: TextStyle(
+                              color: AppTheme.textSecondary,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (canManageMatch)
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primary,
+                          foregroundColor: AppTheme.background,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
+                          textStyle: const TextStyle(
+                              fontSize: 11, fontWeight: FontWeight.w700),
+                        ),
+                        onPressed: () =>
+                            _confirmAdvancePlayoffs(context, tournament),
+                        child: const Text('Advance to QF'),
+                      ),
+                  ],
+                ),
+              ),
             // Bracket
             Expanded(
               child: tournament.rounds.isEmpty
@@ -183,6 +236,8 @@ class _BracketScreenState extends State<BracketScreen> {
                       totalRounds: tournament.totalRounds,
                       isAdmin: canManageMatch,
                       currentUserId: currentUser?.uid,
+                      format: tournament.format,
+                      qualifyingRoundsCount: tournament.qualifyingRoundsCount,
                       onMatchTap: tournament.isOngoing
                           ? (roundIdx, matchIdx) {
                               final match = tournament.rounds[roundIdx][matchIdx];
@@ -413,6 +468,42 @@ class _BracketScreenState extends State<BracketScreen> {
             ],
           ],
         ),
+      ),
+    );
+  }
+
+  void _confirmAdvancePlayoffs(BuildContext context, TournamentModel tournament) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Advance to Quarter-Finals'),
+        content: const Text(
+          'Populate the Quarter-Finals elimination bracket using the current Leaderboard standings?\n\nThe Top 8 players with the best win records will be seeded into the playoff bracket.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel',
+                style: TextStyle(color: AppTheme.textSecondary)),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              await context
+                  .read<TournamentProvider>()
+                  .advanceToPlayoffs(tournament);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Quarter-Finals bracket created! 🏆'),
+                    backgroundColor: AppTheme.statusAvailable,
+                  ),
+                );
+              }
+            },
+            child: const Text('Advance Now'),
+          ),
+        ],
       ),
     );
   }

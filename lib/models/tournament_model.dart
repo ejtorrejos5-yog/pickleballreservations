@@ -79,7 +79,8 @@ class TournamentModel {
   final String name;
   final DateTime date;
   final String status; // 'upcoming' | 'ongoing' | 'completed'
-  final String format;
+  final String format; // 'single_elimination' | 'qualifying_rounds'
+  final int qualifyingRoundsCount; // Number of rounds each player plays in Stage 1 (e.g. 5)
   final List<PlayerModel> players;
   final List<List<MatchModel>> rounds; // [roundIndex][matchIndex]
   final String? description;
@@ -95,6 +96,7 @@ class TournamentModel {
     required this.date,
     required this.status,
     required this.format,
+    this.qualifyingRoundsCount = 5,
     required this.players,
     required this.rounds,
     this.description,
@@ -108,6 +110,19 @@ class TournamentModel {
   bool get isUpcoming => status == 'upcoming';
   bool get isOngoing => status == 'ongoing';
   bool get isCompleted => status == 'completed';
+  bool get isQualifyingFormat => format == 'qualifying_rounds';
+  bool get hasPlayoffs => isQualifyingFormat && rounds.length > qualifyingRoundsCount;
+
+  /// Returns true if all scheduled qualifying matches have been played.
+  bool get areQualifyingRoundsCompleted {
+    if (!isQualifyingFormat || rounds.isEmpty) return false;
+    final limit = qualifyingRoundsCount.clamp(0, rounds.length);
+    for (int r = 0; r < limit; r++) {
+      if (rounds[r].any((m) => !m.isCompleted && m.isReady)) return false;
+    }
+    return true;
+  }
+
   int get totalRounds => rounds.length;
   PlayerModel? get champion =>
       isCompleted && rounds.isNotEmpty && rounds.last.isNotEmpty
@@ -174,6 +189,93 @@ class TournamentModel {
     return null;
   }
 
+  /// Calculates live player standings / rankings based on qualifying matches.
+  List<PlayerStanding> get standings {
+    final stats = <String, Map<String, dynamic>>{};
+    for (final p in players) {
+      stats[p.uid] = {
+        'player': p,
+        'played': 0,
+        'wins': 0,
+        'losses': 0,
+        'scored': 0,
+        'against': 0,
+      };
+    }
+
+    // Only count qualifying rounds if this is qualifying format, else count all rounds
+    final maxRoundIdx = (isQualifyingFormat && qualifyingRoundsCount > 0)
+        ? qualifyingRoundsCount.clamp(0, rounds.length)
+        : rounds.length;
+
+    for (int r = 0; r < maxRoundIdx; r++) {
+      for (final m in rounds[r]) {
+        if (!m.isCompleted || m.winner == null) continue;
+        if (m.player1 != null && stats.containsKey(m.player1!.uid)) {
+          final s = stats[m.player1!.uid]!;
+          s['played'] = (s['played'] as int) + 1;
+          if (m.winner!.uid == m.player1!.uid) {
+            s['wins'] = (s['wins'] as int) + 1;
+          } else {
+            s['losses'] = (s['losses'] as int) + 1;
+          }
+        }
+        if (m.player2 != null && stats.containsKey(m.player2!.uid)) {
+          final s = stats[m.player2!.uid]!;
+          s['played'] = (s['played'] as int) + 1;
+          if (m.winner!.uid == m.player2!.uid) {
+            s['wins'] = (s['wins'] as int) + 1;
+          } else {
+            s['losses'] = (s['losses'] as int) + 1;
+          }
+        }
+
+        // Parse score if present (e.g. "11-7" or "11-9")
+        if (m.score != null && m.player1 != null && m.player2 != null) {
+          final parts = m.score!.split('-');
+          if (parts.length == 2) {
+            final p1Pts = int.tryParse(parts[0].trim()) ?? 0;
+            final p2Pts = int.tryParse(parts[1].trim()) ?? 0;
+            if (stats.containsKey(m.player1!.uid)) {
+              final s1 = stats[m.player1!.uid]!;
+              s1['scored'] = (s1['scored'] as int) + p1Pts;
+              s1['against'] = (s1['against'] as int) + p2Pts;
+            }
+            if (stats.containsKey(m.player2!.uid)) {
+              final s2 = stats[m.player2!.uid]!;
+              s2['scored'] = (s2['scored'] as int) + p2Pts;
+              s2['against'] = (s2['against'] as int) + p1Pts;
+            }
+          }
+        }
+      }
+    }
+
+    final list = stats.values.toList();
+    list.sort((a, b) {
+      final wComp = (b['wins'] as int).compareTo(a['wins'] as int);
+      if (wComp != 0) return wComp;
+      final diffA = (a['scored'] as int) - (a['against'] as int);
+      final diffB = (b['scored'] as int) - (b['against'] as int);
+      final diffComp = diffB.compareTo(diffA);
+      if (diffComp != 0) return diffComp;
+      return (b['scored'] as int).compareTo(a['scored'] as int);
+    });
+
+    return List.generate(list.length, (i) {
+      final item = list[i];
+      return PlayerStanding(
+        player: item['player'] as PlayerModel,
+        rank: i + 1,
+        matchesPlayed: item['played'] as int,
+        wins: item['wins'] as int,
+        losses: item['losses'] as int,
+        pointsScored: item['scored'] as int,
+        pointsAgainst: item['against'] as int,
+      );
+    });
+  }
+
   factory TournamentModel.fromFirestore(
       Map<String, dynamic> data, String id) {
     final players = (data['players'] as List? ?? [])
@@ -216,6 +318,7 @@ class TournamentModel {
       date: (data['date'] as Timestamp).toDate(),
       status: data['status'] as String? ?? 'upcoming',
       format: data['format'] as String? ?? 'single_elimination',
+      qualifyingRoundsCount: data['qualifyingRoundsCount'] as int? ?? 5,
       players: players,
       rounds: rounds,
       description: data['description'] as String?,
@@ -232,6 +335,7 @@ class TournamentModel {
         'date': Timestamp.fromDate(date),
         'status': status,
         'format': format,
+        'qualifyingRoundsCount': qualifyingRoundsCount,
         'players': players.map((p) => p.toMap()).toList(),
         'rounds': rounds
             .map((round) => {
@@ -251,6 +355,7 @@ class TournamentModel {
     DateTime? date,
     String? status,
     String? format,
+    int? qualifyingRoundsCount,
     List<PlayerModel>? players,
     List<List<MatchModel>>? rounds,
     String? description,
@@ -265,6 +370,7 @@ class TournamentModel {
         date: date ?? this.date,
         status: status ?? this.status,
         format: format ?? this.format,
+        qualifyingRoundsCount: qualifyingRoundsCount ?? this.qualifyingRoundsCount,
         players: players ?? this.players,
         rounds: rounds ?? this.rounds,
         description: description ?? this.description,
@@ -274,4 +380,27 @@ class TournamentModel {
         creatorName: creatorName ?? this.creatorName,
         createdAt: createdAt,
       );
+}
+
+// ─── Player Standing / Leaderboard ──────────────────────────────────────────
+
+class PlayerStanding {
+  final PlayerModel player;
+  final int rank;
+  final int matchesPlayed;
+  final int wins;
+  final int losses;
+  final int pointsScored;
+  final int pointsAgainst;
+  int get pointDiff => pointsScored - pointsAgainst;
+
+  const PlayerStanding({
+    required this.player,
+    required this.rank,
+    required this.matchesPlayed,
+    required this.wins,
+    required this.losses,
+    required this.pointsScored,
+    required this.pointsAgainst,
+  });
 }

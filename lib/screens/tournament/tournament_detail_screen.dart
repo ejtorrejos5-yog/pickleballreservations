@@ -127,6 +127,12 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> {
                       ),
                     if (currentUser != null) const SizedBox(height: 20),
 
+                    // Stage 1 Qualifying Standings & Leaderboard
+                    if (tournament.isQualifyingFormat)
+                      _buildStandingsSection(context, tournament, currentUser?.uid, canManage),
+                    if (tournament.isQualifyingFormat)
+                      const SizedBox(height: 20),
+
                     // Tournament Winners & Placements (if completed)
                     if (tournament.isCompleted && tournament.champion != null)
                       _buildWinnersPodium(tournament, currentUser?.uid),
@@ -219,8 +225,13 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> {
             children: [
               _stat(Icons.people_outline, '${tournament.players.length}',
                   'Players'),
-              _stat(Icons.account_tree_outlined,
-                  '${tournament.totalRounds}', 'Rounds'),
+              _stat(
+                Icons.account_tree_outlined,
+                tournament.isQualifyingFormat
+                    ? '${tournament.qualifyingRoundsCount} Rds → QF'
+                    : '${tournament.totalRounds} Rds',
+                tournament.isQualifyingFormat ? 'Format' : 'Rounds',
+              ),
               _stat(Icons.sports_tennis_rounded,
                   tournament.courtName ?? (tournament.courtId != null ? 'Assigned' : 'Open Court'),
                   'Court'),
@@ -610,6 +621,502 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> {
               }
             },
             child: const Text('Leave'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStandingsSection(
+    BuildContext context,
+    TournamentModel tournament,
+    String? currentUid,
+    bool canManage,
+  ) {
+    final standings = tournament.standings;
+    final playoffSpots = tournament.players.length >= 8 ? 8 : (tournament.players.length >= 4 ? 4 : 2);
+    final isPlayoffsReady = tournament.areQualifyingRoundsCompleted;
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppTheme.card,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: tournament.hasPlayoffs
+              ? AppTheme.primary.withOpacity(0.4)
+              : const Color(0xFFFFB300).withOpacity(0.35),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: (tournament.hasPlayoffs ? AppTheme.primary : const Color(0xFFFFB300))
+                .withOpacity(0.08),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header Row
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: (tournament.hasPlayoffs ? AppTheme.primary : const Color(0xFFFFB300))
+                      .withOpacity(0.18),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  Icons.leaderboard_rounded,
+                  color: tournament.hasPlayoffs ? AppTheme.primary : const Color(0xFFFFB300),
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'STAGE 1 STANDINGS & LEADERBOARD',
+                      style: TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                    Text(
+                      '${tournament.qualifyingRoundsCount} rounds per player • Top $playoffSpots advance to ${playoffSpots == 8 ? "Quarter-Finals" : "Playoffs"}',
+                      style: const TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: tournament.hasPlayoffs
+                      ? AppTheme.statusAvailable.withOpacity(0.15)
+                      : const Color(0xFFFFB300).withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  tournament.hasPlayoffs ? 'PLAYOFFS SEEDED' : 'QUALIFYING ACTIVE',
+                  style: TextStyle(
+                    color: tournament.hasPlayoffs
+                        ? AppTheme.statusAvailable
+                        : const Color(0xFFFFB300),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Advance to Quarter-Finals Action Card (Organizer / Admin)
+          if (canManage && tournament.isOngoing && !tournament.hasPlayoffs) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isPlayoffsReady
+                      ? AppTheme.primary.withOpacity(0.5)
+                      : AppTheme.cardBorder,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        isPlayoffsReady
+                            ? Icons.check_circle_rounded
+                            : Icons.info_outline_rounded,
+                        size: 16,
+                        color: isPlayoffsReady
+                            ? AppTheme.statusAvailable
+                            : AppTheme.textMuted,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          isPlayoffsReady
+                              ? 'All $playoffSpots qualifying spots ready! Advance top seeds to Playoffs.'
+                              : 'Qualifying matches in progress. You can advance top $playoffSpots players to Quarter-Finals anytime.',
+                          style: TextStyle(
+                            color: isPlayoffsReady
+                                ? AppTheme.statusAvailable
+                                : AppTheme.textSecondary,
+                            fontSize: 12,
+                            fontWeight: isPlayoffsReady ? FontWeight.w600 : FontWeight.normal,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 42,
+                    child: ElevatedButton.icon(
+                      onPressed: () => _confirmAdvanceToPlayoffs(context, tournament),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: isPlayoffsReady ? AppTheme.primary : AppTheme.card,
+                        foregroundColor: isPlayoffsReady ? AppTheme.background : AppTheme.primary,
+                        side: BorderSide(color: AppTheme.primary.withOpacity(0.5)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      icon: const Icon(Icons.flash_on_rounded, size: 16),
+                      label: Text(
+                        'Seed Top $playoffSpots to ${playoffSpots == 8 ? "Quarter-Finals" : "Playoffs"}',
+                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+          ],
+
+          // Table Header
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppTheme.surface.withOpacity(0.5),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Row(
+              children: [
+                SizedBox(
+                  width: 34,
+                  child: Text(
+                    '#',
+                    style: TextStyle(
+                      color: AppTheme.textMuted,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    'PLAYER',
+                    style: TextStyle(
+                      color: AppTheme.textMuted,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  width: 48,
+                  child: Text(
+                    'RDS',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: AppTheme.textMuted,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  width: 58,
+                  child: Text(
+                    'W - L',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: AppTheme.textMuted,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  width: 42,
+                  child: Text(
+                    'DIFF',
+                    textAlign: TextAlign.right,
+                    style: TextStyle(
+                      color: AppTheme.textMuted,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 6),
+
+          // Standings Rows
+          ...List.generate(standings.length, (index) {
+            final standing = standings[index];
+            final rank = index + 1;
+            final isQualified = rank <= playoffSpots;
+            final isCurrentUser = currentUid != null && standing.player.uid == currentUid;
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+              decoration: BoxDecoration(
+                color: isCurrentUser
+                    ? AppTheme.primary.withOpacity(0.12)
+                    : isQualified
+                        ? AppTheme.surface.withOpacity(0.6)
+                        : Colors.transparent,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: isCurrentUser
+                      ? AppTheme.primary.withOpacity(0.5)
+                      : isQualified
+                          ? AppTheme.primary.withOpacity(0.2)
+                          : Colors.transparent,
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                children: [
+                  // Rank Badge
+                  SizedBox(
+                    width: 34,
+                    child: Row(
+                      children: [
+                        Text(
+                          '$rank',
+                          style: TextStyle(
+                            color: isQualified ? AppTheme.primary : AppTheme.textMuted,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        if (isQualified) ...[
+                          const SizedBox(width: 2),
+                          const Icon(
+                            Icons.check_rounded,
+                            size: 11,
+                            color: AppTheme.statusAvailable,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+
+                  // Player Name
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            standing.player.name,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: isCurrentUser
+                                  ? AppTheme.primary
+                                  : AppTheme.textPrimary,
+                              fontWeight:
+                                  isCurrentUser ? FontWeight.w700 : FontWeight.w500,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                        if (isCurrentUser) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 5, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: AppTheme.primary,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text(
+                              'YOU',
+                              style: TextStyle(
+                                color: AppTheme.background,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ],
+                        if (isQualified && rank <= 8) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 4, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: AppTheme.statusAvailable.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: AppTheme.statusAvailable.withOpacity(0.4),
+                              ),
+                            ),
+                            child: const Text(
+                              'QF',
+                              style: TextStyle(
+                                color: AppTheme.statusAvailable,
+                                fontSize: 8,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+
+                  // Rounds Played
+                  SizedBox(
+                    width: 48,
+                    child: Text(
+                      '${standing.matchesPlayed}/${tournament.qualifyingRoundsCount}',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+
+                  // W-L
+                  SizedBox(
+                    width: 58,
+                    child: Text(
+                      '${standing.wins}-${standing.losses}',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: standing.wins > standing.losses
+                            ? AppTheme.statusAvailable
+                            : (standing.losses > standing.wins
+                                ? AppTheme.statusInUse
+                                : AppTheme.textPrimary),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+
+                  // Point Diff
+                  SizedBox(
+                    width: 42,
+                    child: Text(
+                      standing.pointDiff > 0
+                          ? '+${standing.pointDiff}'
+                          : '${standing.pointDiff}',
+                      textAlign: TextAlign.right,
+                      style: TextStyle(
+                        color: standing.pointDiff > 0
+                            ? AppTheme.statusAvailable
+                            : (standing.pointDiff < 0
+                                ? AppTheme.statusInUse
+                                : AppTheme.textMuted),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    ).animate().fadeIn(duration: 400.ms);
+  }
+
+  void _confirmAdvanceToPlayoffs(
+    BuildContext context,
+    TournamentModel tournament,
+  ) {
+    final playoffSpots = tournament.players.length >= 8 ? 8 : (tournament.players.length >= 4 ? 4 : 2);
+    final topPlayers = tournament.standings.take(playoffSpots).toList();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Advance to ${playoffSpots == 8 ? "Quarter-Finals" : "Playoffs"}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'This will generate the knockout bracket with the top $playoffSpots qualified seeds based on their qualifying round scores:',
+              style: const TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppTheme.surface,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: topPlayers.asMap().entries.map((entry) {
+                  final idx = entry.key + 1;
+                  final s = entry.value;
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Text(
+                      'Seed $idx: ${s.player.name} (${s.wins}W-${s.losses}L, diff: ${s.pointDiff > 0 ? "+${s.pointDiff}" : s.pointDiff})',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primary,
+              foregroundColor: AppTheme.background,
+            ),
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              final messenger = ScaffoldMessenger.of(context);
+              final success = await context
+                  .read<TournamentProvider>()
+                  .advanceToPlayoffs(tournament);
+
+              if (success) {
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Text(
+                        'Quarter-Finals bracket created with top $playoffSpots seeds!'),
+                    backgroundColor: AppTheme.statusAvailable,
+                  ),
+                );
+              } else {
+                messenger.showSnackBar(
+                  const SnackBar(
+                    content: Text('Failed to generate playoffs bracket.'),
+                    backgroundColor: AppTheme.statusInUse,
+                  ),
+                );
+              }
+            },
+            child: Text('Generate ${playoffSpots == 8 ? "Quarter-Finals" : "Playoffs"}'),
           ),
         ],
       ),

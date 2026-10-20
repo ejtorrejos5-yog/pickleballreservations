@@ -8,6 +8,8 @@ class BracketWidget extends StatelessWidget {
   final int totalRounds;
   final bool isAdmin;
   final String? currentUserId;
+  final String format;
+  final int qualifyingRoundsCount;
   final Function(int roundIndex, int matchIndex)? onMatchTap;
 
   const BracketWidget({
@@ -16,6 +18,8 @@ class BracketWidget extends StatelessWidget {
     required this.totalRounds,
     this.isAdmin = false,
     this.currentUserId,
+    this.format = 'single_elimination',
+    this.qualifyingRoundsCount = 0,
     this.onMatchTap,
   });
 
@@ -29,6 +33,9 @@ class BracketWidget extends StatelessWidget {
         children: List.generate(rounds.length, (roundIdx) {
           final round = rounds[roundIdx];
           final isLastRound = roundIdx == rounds.length - 1;
+          final isKnockoutConnector = format == 'single_elimination' ||
+              roundIdx >= qualifyingRoundsCount;
+
           return Row(
             children: [
               // Round column
@@ -38,19 +45,23 @@ class BracketWidget extends StatelessWidget {
                 totalRounds: totalRounds,
                 isAdmin: isAdmin,
                 currentUserId: currentUserId,
+                format: format,
+                qualifyingRoundsCount: qualifyingRoundsCount,
                 onMatchTap: onMatchTap != null
                     ? (matchIdx) => onMatchTap!(roundIdx, matchIdx)
                     : null,
               ),
-              // Connector lines between rounds
-              if (!isLastRound)
+              // Connector lines between rounds (only in elimination/playoff stages)
+              if (!isLastRound && isKnockoutConnector)
                 SizedBox(
                   width: 40,
                   child: CustomPaint(
                     painter: _ConnectorPainter(matchCount: round.length),
                     size: Size(40, _columnHeight(round.length)),
                   ),
-                ),
+                )
+              else if (!isLastRound)
+                const SizedBox(width: 24),
             ],
           );
         }),
@@ -68,6 +79,8 @@ class _RoundColumn extends StatelessWidget {
   final int totalRounds;
   final bool isAdmin;
   final String? currentUserId;
+  final String format;
+  final int qualifyingRoundsCount;
   final Function(int matchIndex)? onMatchTap;
 
   const _RoundColumn({
@@ -76,6 +89,8 @@ class _RoundColumn extends StatelessWidget {
     required this.totalRounds,
     required this.isAdmin,
     this.currentUserId,
+    this.format = 'single_elimination',
+    this.qualifyingRoundsCount = 0,
     this.onMatchTap,
   });
 
@@ -131,6 +146,25 @@ class _RoundColumn extends StatelessWidget {
   }
 
   String _roundName(int round, int total) {
+    if (format == 'qualifying_rounds' && qualifyingRoundsCount > 0) {
+      if (round <= qualifyingRoundsCount) {
+        return 'ROUND $round (STAGE 1)';
+      }
+      final playoffRound = round - qualifyingRoundsCount;
+      final totalPlayoffs = total - qualifyingRoundsCount;
+      final remaining = totalPlayoffs - playoffRound + 1;
+      switch (remaining) {
+        case 1:
+          return 'FINAL';
+        case 2:
+          return 'SEMI-FINAL';
+        case 3:
+          return 'QUARTER-FINAL';
+        default:
+          return 'PLAYOFF R$playoffRound';
+      }
+    }
+
     final remaining = total - round + 1;
     switch (remaining) {
       case 1:

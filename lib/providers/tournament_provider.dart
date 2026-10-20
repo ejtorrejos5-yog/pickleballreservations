@@ -47,6 +47,8 @@ class TournamentProvider extends ChangeNotifier {
     required String name,
     required DateTime date,
     required List<PlayerModel> players,
+    String format = 'qualifying_rounds',
+    int qualifyingRoundsCount = 5,
     String? description,
     String? courtId,
     String? courtName,
@@ -58,13 +60,17 @@ class TournamentProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final rounds = _service.generateBracket(players);
+      final rounds = (format == 'qualifying_rounds')
+          ? _service.generateQualifyingTournament(players, qualifyingRoundsCount)
+          : _service.generateBracket(players);
+
       final tournament = TournamentModel(
         id: '', // Firestore will assign
         name: name.trim(),
         date: date,
         status: 'upcoming',
-        format: 'single_elimination',
+        format: format,
+        qualifyingRoundsCount: qualifyingRoundsCount,
         players: players,
         rounds: rounds,
         description: description?.trim(),
@@ -99,7 +105,11 @@ class TournamentProvider extends ChangeNotifier {
 
     try {
       final updatedPlayers = List<PlayerModel>.from(tournament.players)..add(player);
-      final updatedRounds = _service.generateBracket(updatedPlayers);
+      final updatedRounds = (tournament.format == 'qualifying_rounds')
+          ? _service.generateQualifyingTournament(
+              updatedPlayers, tournament.qualifyingRoundsCount)
+          : _service.generateBracket(updatedPlayers);
+
       final updatedTournament = tournament.copyWith(
         players: updatedPlayers,
         rounds: updatedRounds,
@@ -128,7 +138,11 @@ class TournamentProvider extends ChangeNotifier {
     try {
       final updatedPlayers =
           tournament.players.where((p) => p.uid != playerUid).toList();
-      final updatedRounds = _service.generateBracket(updatedPlayers);
+      final updatedRounds = (tournament.format == 'qualifying_rounds')
+          ? _service.generateQualifyingTournament(
+              updatedPlayers, tournament.qualifyingRoundsCount)
+          : _service.generateBracket(updatedPlayers);
+
       final updatedTournament = tournament.copyWith(
         players: updatedPlayers,
         rounds: updatedRounds,
@@ -139,6 +153,25 @@ class TournamentProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       _error = 'Failed to leave tournament: $e';
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // ─── Advance to Quarter-Finals / Playoffs ───────────────────────────────────
+  Future<bool> advanceToPlayoffs(TournamentModel tournament) async {
+    _error = null;
+    _isLoading = true;
+    notifyListeners();
+    try {
+      final updated = _service.advanceToPlayoffs(tournament);
+      await _service.updateTournament(updated);
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _error = 'Failed to generate playoff bracket: $e';
       _isLoading = false;
       notifyListeners();
       return false;
@@ -159,6 +192,8 @@ class TournamentProvider extends ChangeNotifier {
       matchIndex: matchIndex,
       winner: winner,
       score: score,
+      format: tournament.format,
+      qualifyingRoundsCount: tournament.qualifyingRoundsCount,
     );
 
     // Check if final match was completed
@@ -192,8 +227,10 @@ class TournamentProvider extends ChangeNotifier {
     }
   }
 
-  String getRoundName(int roundNumber, int totalRounds) =>
-      _service.getRoundName(roundNumber, totalRounds);
+  String getRoundName(int roundNumber, int totalRounds,
+          {String? format, int? qualifyingRoundsCount}) =>
+      _service.getRoundName(roundNumber, totalRounds,
+          format: format, qualifyingRoundsCount: qualifyingRoundsCount);
 
   void clearError() {
     _error = null;
