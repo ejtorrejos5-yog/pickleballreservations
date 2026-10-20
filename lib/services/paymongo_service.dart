@@ -1,5 +1,6 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
+import 'package:flutter/foundation.dart'
+    show kIsWeb, debugPrint, defaultTargetPlatform, TargetPlatform;
 import 'package:http/http.dart' as http;
 
 class PaymongoService {
@@ -12,15 +13,29 @@ class PaymongoService {
   static const String _apiBaseUrl = 'https://api.paymongo.com';
   static const String _proxyBaseUrl = 'http://localhost:8085';
 
-  /// On mobile: call PayMongo directly (no CORS issues).
-  /// On web: try local proxy first (avoids CORS), then fall back to direct.
-  /// The proxy may take ~1-2s to warm up when first launched.
-  List<String> get _endpoints =>
-      kIsWeb ? [_proxyBaseUrl, _apiBaseUrl] : [_apiBaseUrl];
+  /// Returns true if running on a mobile device / cellphone
+  /// (Native Android/iOS app or Android/iOS mobile browser).
+  static bool get isMobileDevice {
+    if (!kIsWeb) return true; // Native Android or iOS app
+    return defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS;
+  }
 
-  /// Max retries per endpoint. Web gets more retries to handle proxy warm-up.
-  int _retriesFor(String base) =>
-      (kIsWeb && base == _proxyBaseUrl) ? 5 : 3;
+  /// On mobile / cellphone: call PayMongo directly with NO proxy needed.
+  /// On desktop web: attempts local proxy first to bypass PC browser CORS, then falls back to direct.
+  List<String> get _endpoints {
+    if (isMobileDevice) {
+      // Mobile / Cellphone: DIRECT TO PAYMONGO (no proxy required)
+      return [_apiBaseUrl];
+    }
+    // Desktop Web browser
+    return [_proxyBaseUrl, _apiBaseUrl];
+  }
+
+  int _retriesFor(String base) {
+    if (isMobileDevice) return 2;
+    return base == _proxyBaseUrl ? 2 : 2;
+  }
 
   String get _authHeader {
     final bytes = utf8.encode('$_secretKey:');
@@ -52,21 +67,27 @@ class PaymongoService {
 
     for (final base in _endpoints) {
       final maxAttempts = _retriesFor(base);
-      // On first proxy attempt, give it a moment to warm up
-      if (kIsWeb && base == _proxyBaseUrl) {
-        await Future.delayed(const Duration(milliseconds: 800));
+
+      // On desktop web proxy attempt, give quick warm up
+      if (kIsWeb && !isMobileDevice && base == _proxyBaseUrl) {
+        await Future.delayed(const Duration(milliseconds: 200));
       }
-      // Retry up to maxAttempts times per endpoint with exponential back-off
+
       for (int attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
           debugPrint('[PayMongo] Attempt $attempt → POST $base/v1/links');
+
+          final timeout = (base == _proxyBaseUrl)
+              ? const Duration(seconds: 3)
+              : const Duration(seconds: 12);
+
           final response = await http
               .post(
                 Uri.parse('$base/v1/links'),
                 headers: headers,
                 body: body,
               )
-              .timeout(const Duration(seconds: 15));
+              .timeout(timeout);
 
           debugPrint(
               '[PayMongo] Response ${response.statusCode}: ${response.body}');
@@ -90,7 +111,7 @@ class PaymongoService {
         } catch (e) {
           debugPrint('[PayMongo] Attempt $attempt failed on $base: $e');
           if (attempt < maxAttempts) {
-            await Future.delayed(Duration(seconds: attempt)); // back-off
+            await Future.delayed(Duration(seconds: attempt));
           }
         }
       }
@@ -107,12 +128,16 @@ class PaymongoService {
 
     for (final base in _endpoints) {
       try {
+        final timeout = (base == _proxyBaseUrl)
+            ? const Duration(seconds: 3)
+            : const Duration(seconds: 10);
+
         final response = await http
             .get(
               Uri.parse('$base/v1/links/$linkId'),
               headers: headers,
             )
-            .timeout(const Duration(seconds: 10));
+            .timeout(timeout);
 
         if (response.statusCode == 200) {
           final body = jsonDecode(response.body);

@@ -8,6 +8,7 @@ class CountdownTimerWidget extends StatefulWidget {
   final DateTime? startTime;
   final double size;
   final bool showLabel;
+  final VoidCallback? onExpired;
 
   const CountdownTimerWidget({
     super.key,
@@ -15,6 +16,7 @@ class CountdownTimerWidget extends StatefulWidget {
     this.startTime,
     this.size = 140,
     this.showLabel = true,
+    this.onExpired,
   });
 
   @override
@@ -35,11 +37,19 @@ class _CountdownTimerWidgetState extends State<CountdownTimerWidget>
       duration: const Duration(milliseconds: 600),
     )..forward();
     _updateSeconds();
+    if (_secondsRemaining <= 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.onExpired?.call();
+      });
+    }
     _timer = Timer.periodic(const Duration(seconds: 1), (_) => _updateSeconds());
   }
 
   void _updateSeconds() {
     final secs = DateHelpers.secondsUntilEnd(widget.endTime);
+    if (secs <= 0 && _secondsRemaining > 0) {
+      widget.onExpired?.call();
+    }
     if (mounted) setState(() => _secondsRemaining = secs);
   }
 
@@ -126,7 +136,8 @@ class _CountdownTimerWidgetState extends State<CountdownTimerWidget>
 // ─── Compact Inline Timer ─────────────────────────────────────────────────────
 class InlineCountdown extends StatefulWidget {
   final DateTime endTime;
-  const InlineCountdown({super.key, required this.endTime});
+  final VoidCallback? onExpired;
+  const InlineCountdown({super.key, required this.endTime, this.onExpired});
 
   @override
   State<InlineCountdown> createState() => _InlineCountdownState();
@@ -140,10 +151,19 @@ class _InlineCountdownState extends State<InlineCountdown> {
   void initState() {
     super.initState();
     _seconds = DateHelpers.secondsUntilEnd(widget.endTime);
+    if (_seconds <= 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.onExpired?.call();
+      });
+    }
     _timer = Timer.periodic(
         const Duration(seconds: 1), (_) {
       if (mounted) {
-        setState(() => _seconds = DateHelpers.secondsUntilEnd(widget.endTime));
+        final s = DateHelpers.secondsUntilEnd(widget.endTime);
+        if (s <= 0 && _seconds > 0) {
+          widget.onExpired?.call();
+        }
+        setState(() => _seconds = s);
       }
     });
   }

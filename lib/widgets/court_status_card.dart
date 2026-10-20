@@ -70,7 +70,10 @@ class CourtStatusCard extends StatelessWidget {
                   const SizedBox(height: 12),
                   // ── Status pill ───────────────────────────────────────────
                   _buildStatusPill(color, statusType),
-                  if (showReservedName && status.reservedByName != null) ...[
+                  if (showReservedName &&
+                      status.reservedByName != null &&
+                      statusType != CourtStatusType.available &&
+                      !status.isExpired) ...[
                     const SizedBox(height: 8),
                     Row(
                       children: [

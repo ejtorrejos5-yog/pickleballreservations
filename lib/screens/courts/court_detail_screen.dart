@@ -1,13 +1,19 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:provider/provider.dart';
 import '../../models/court_model.dart';
 import '../../models/court_status_model.dart';
+import '../../providers/court_provider.dart';
+import '../../services/court_service.dart';
+import '../../services/firestore_service.dart';
+import '../../core/constants/app_constants.dart';
 import '../../widgets/countdown_timer_widget.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/date_helpers.dart';
 import '../reservation/booking_screen.dart';
 
-class CourtDetailScreen extends StatelessWidget {
+class CourtDetailScreen extends StatefulWidget {
   final CourtModel court;
   final CourtStatusModel status;
   final bool showReservedName;
@@ -20,8 +26,59 @@ class CourtDetailScreen extends StatelessWidget {
   });
 
   @override
+  State<CourtDetailScreen> createState() => _CourtDetailScreenState();
+}
+
+class _CourtDetailScreenState extends State<CourtDetailScreen> {
+  Timer? _ticker;
+  bool _isAutoReleasing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Ticker to continuously update UI and catch expiration instant
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _handleExpired(CourtStatusModel currentStatus) async {
+    if (_isAutoReleasing) return;
+    _isAutoReleasing = true;
+
+    try {
+      await CourtService().clearCourtStatus(widget.court.id);
+      if (currentStatus.reservationId != null) {
+        await FirestoreService().updateReservationStatus(
+          currentStatus.reservationId!,
+          AppConstants.statusCompleted,
+        );
+      }
+    } catch (_) {
+    } finally {
+      _isAutoReleasing = false;
+      if (mounted) setState(() {});
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final statusType = status.statusType;
+    // Watch CourtProvider for live status changes
+    final courtProvider = context.watch<CourtProvider>();
+    final liveStatus = courtProvider.courtStatuses[widget.court.id] ?? widget.status;
+
+    // If the session has reached expiration, auto release back to available
+    if (liveStatus.isExpired && (liveStatus.isOccupiedRaw || liveStatus.reservationId != null)) {
+      _handleExpired(liveStatus);
+    }
+
+    final statusType = liveStatus.statusType;
     final statusColor = _colorFor(statusType);
 
     return Scaffold(
@@ -46,7 +103,7 @@ class CourtDetailScreen extends StatelessWidget {
                         color: AppTheme.textPrimary, size: 20),
                   ),
                 ),
-                title: Text(court.name),
+                title: Text(widget.court.name),
                 pinned: true,
               ),
               // ── Body ──────────────────────────────────────────────────
@@ -54,18 +111,22 @@ class CourtDetailScreen extends StatelessWidget {
                 padding: const EdgeInsets.all(20),
                 sliver: SliverList(
                   delegate: SliverChildListDelegate([
-                    // Status Card
+                    // Status Card (Available / Reserved / In Use)
                     _buildStatusCard(statusType, statusColor),
                     const SizedBox(height: 20),
-                    // Countdown (if in use)
+                    // Countdown (only if currently in use and NOT expired)
                     if (statusType == CourtStatusType.inUse &&
-                        status.bookedUntil != null) ...[
-                      _buildCountdownSection(context),
+                        liveStatus.bookedUntil != null &&
+                        !liveStatus.isExpired) ...[
+                      _buildCountdownSection(context, liveStatus),
                       const SizedBox(height: 20),
                     ],
-                    // Session Info (if reserved or in use)
-                    if (showReservedName && status.reservedByName != null) ...[
-                      _buildSessionInfo(),
+                    // Session Info (only when active reservation / in use exists)
+                    if (widget.showReservedName &&
+                        liveStatus.reservedByName != null &&
+                        statusType != CourtStatusType.available &&
+                        !liveStatus.isExpired) ...[
+                      _buildSessionInfo(liveStatus),
                       const SizedBox(height: 20),
                     ],
                     // Court Info Card
@@ -144,7 +205,7 @@ class CourtDetailScreen extends StatelessWidget {
         .slideY(begin: 0.06, end: 0, duration: 400.ms);
   }
 
-  Widget _buildCountdownSection(BuildContext context) {
+  Widget _buildCountdownSection(BuildContext context, CourtStatusModel currentStatus) {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: AppTheme.glassCard,
@@ -160,9 +221,10 @@ class CourtDetailScreen extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           CountdownTimerWidget(
-            endTime: status.bookedUntil!,
-            startTime: status.occupiedSince,
+            endTime: currentStatus.bookedUntil!,
+            startTime: currentStatus.occupiedSince,
             size: 160,
+            onExpired: () => _handleExpired(currentStatus),
           ),
         ],
       ),
@@ -172,19 +234,19 @@ class CourtDetailScreen extends StatelessWidget {
         .slideY(begin: 0.06, end: 0, delay: 100.ms, duration: 400.ms);
   }
 
-  Widget _buildSessionInfo() {
+  Widget _buildSessionInfo(CourtStatusModel currentStatus) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: AppTheme.glassCard,
       child: Column(
         children: [
-          _infoRow(Icons.person_outlined, 'Reserved by', status.reservedByName!),
-          if (status.bookedUntil != null) ...[
+          _infoRow(Icons.person_outlined, 'Reserved by', currentStatus.reservedByName!),
+          if (currentStatus.bookedUntil != null) ...[
             const Divider(color: AppTheme.cardBorder, height: 20),
             _infoRow(
               Icons.access_time_rounded,
               'Session ends',
-              DateHelpers.toTimeString(status.bookedUntil!),
+              DateHelpers.toTimeString(currentStatus.bookedUntil!),
             ),
           ],
         ],
@@ -209,8 +271,8 @@ class CourtDetailScreen extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            court.description.isNotEmpty
-                ? court.description
+            widget.court.description.isNotEmpty
+                ? widget.court.description
                 : 'Premium cushioned flooring pickleball court with professional tournament markings.',
             style: const TextStyle(
               color: AppTheme.textSecondary,
@@ -223,7 +285,7 @@ class CourtDetailScreen extends StatelessWidget {
               'Lifestyle Pickleball Court (LPC)'),
           const Divider(color: AppTheme.cardBorder, height: 20),
           _infoRow(Icons.payments_outlined, 'Hourly Rate',
-              '₱${court.pricePerHour.toStringAsFixed(0)} / hour slot',
+              '₱${widget.court.pricePerHour.toStringAsFixed(0)} / hour slot',
               valueColor: AppTheme.primary),
           const Divider(color: AppTheme.cardBorder, height: 20),
           _infoRow(Icons.qr_code_scanner_rounded, 'Verification', 'QR Code Player Check-In'),
@@ -267,7 +329,7 @@ class CourtDetailScreen extends StatelessWidget {
       child: ElevatedButton.icon(
         onPressed: () => Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) => BookingScreen(court: court),
+            builder: (_) => BookingScreen(court: widget.court),
           ),
         ),
         icon: const Icon(Icons.add_rounded, size: 20),

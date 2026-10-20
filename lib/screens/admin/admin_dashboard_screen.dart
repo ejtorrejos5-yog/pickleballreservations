@@ -14,6 +14,8 @@ import '../../services/court_service.dart';
 import 'admin_qr_scanner_screen.dart';
 import 'admin_court_schedule_screen.dart';
 import 'admin_user_management_screen.dart';
+import 'admin_revenue_analytics_screen.dart';
+import 'admin_walk_in_dialog.dart';
 import 'admin_lcd_control_sheet.dart';
 import '../../widgets/reschedule_dialog.dart';
 
@@ -37,14 +39,203 @@ class AdminDashboardScreen extends StatelessWidget {
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
-                child: _buildStats(courts, courtStatuses),
+                child: _buildStats(context, courts, courtStatuses),
               ),
             ),
 
-            // ── Quick Action: User Management ──────────────────────────────
+            // ── Primary Quick Actions: Walk-In & Revenue Reports ──────────────
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                child: Row(
+                  children: [
+                    // Walk-in booking button
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => AdminWalkInDialog.show(context),
+                        child: Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF0F3A2E), Color(0xFF132533)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: const Color(0xFF10B981).withOpacity(0.5),
+                              width: 1.5,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF10B981).withOpacity(0.12),
+                                blurRadius: 12,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF10B981).withOpacity(0.2),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: const Icon(
+                                      Icons.point_of_sale_rounded,
+                                      color: Color(0xFF10B981),
+                                      size: 20,
+                                    ),
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF10B981).withOpacity(0.2),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: const Text(
+                                      '+ WALK-IN',
+                                      style: TextStyle(
+                                        color: Color(0xFF10B981),
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              const Text(
+                                'Walk-In Payment',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              const Text(
+                                'Cash / QR counter booking',
+                                style: TextStyle(
+                                  color: AppTheme.textSecondary,
+                                  fontSize: 11,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // Revenue Analytics button
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const AdminRevenueAnalyticsScreen(),
+                            ),
+                          );
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                AppTheme.primary.withOpacity(0.18),
+                                const Color(0xFF1A2A38),
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: AppTheme.primary.withOpacity(0.5),
+                              width: 1.5,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppTheme.primary.withOpacity(0.12),
+                                blurRadius: 12,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.primary.withOpacity(0.2),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: const Icon(
+                                      Icons.insights_rounded,
+                                      color: AppTheme.primary,
+                                      size: 20,
+                                    ),
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.primary.withOpacity(0.2),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: const Text(
+                                      'REPORTS',
+                                      style: TextStyle(
+                                        color: AppTheme.primary,
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              const Text(
+                                'Revenue & Analytics',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              const Text(
+                                'Daily, weekly & monthly',
+                                style: TextStyle(
+                                  color: AppTheme.textSecondary,
+                                  fontSize: 11,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // ── Secondary Quick Action: User Management ──────────────────────
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
                 child: GestureDetector(
                   onTap: () {
                     Navigator.of(context).push(
@@ -54,24 +245,24 @@ class AdminDashboardScreen extends StatelessWidget {
                     );
                   },
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     decoration: BoxDecoration(
                       color: AppTheme.card,
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(14),
                       border: Border.all(color: AppTheme.cardBorder),
                     ),
                     child: Row(
                       children: [
                         Container(
-                          padding: const EdgeInsets.all(10),
+                          padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
                             color: AppTheme.accent.withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(10),
                           ),
                           child: const Icon(Icons.manage_accounts_rounded,
-                              color: AppTheme.accent, size: 22),
+                              color: AppTheme.accent, size: 20),
                         ),
-                        const SizedBox(width: 14),
+                        const SizedBox(width: 12),
                         const Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -80,23 +271,22 @@ class AdminDashboardScreen extends StatelessWidget {
                                 'Manage Players & Admins',
                                 style: TextStyle(
                                   color: AppTheme.textPrimary,
-                                  fontSize: 14,
+                                  fontSize: 13,
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
-                              SizedBox(height: 2),
                               Text(
-                                'View profiles, change roles, inspect bookings',
+                                'View profiles, change roles, inspect user bookings',
                                 style: TextStyle(
                                   color: AppTheme.textSecondary,
-                                  fontSize: 12,
+                                  fontSize: 11,
                                 ),
                               ),
                             ],
                           ),
                         ),
                         const Icon(Icons.arrow_forward_ios_rounded,
-                            color: AppTheme.textMuted, size: 16),
+                            color: AppTheme.textMuted, size: 14),
                       ],
                     ),
                   ),
@@ -375,6 +565,22 @@ class AdminDashboardScreen extends StatelessWidget {
             ),
           ),
           IconButton(
+            icon: const Icon(Icons.point_of_sale_rounded, color: Color(0xFF10B981)),
+            tooltip: 'Walk-In Payment',
+            onPressed: () => AdminWalkInDialog.show(context),
+          ),
+          IconButton(
+            icon: const Icon(Icons.insights_rounded, color: AppTheme.primary),
+            tooltip: 'Revenue Reports & Analytics',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const AdminRevenueAnalyticsScreen(),
+                ),
+              );
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.manage_accounts_rounded, color: AppTheme.accent),
             tooltip: 'Manage Users',
             onPressed: () {
@@ -406,11 +612,21 @@ class AdminDashboardScreen extends StatelessWidget {
     ).animate().fadeIn(duration: 400.ms);
   }
 
-  Widget _buildStats(List<CourtModel> courts, Map<String, CourtStatusModel> statuses) {
+  Widget _buildStats(BuildContext context, List<CourtModel> courts, Map<String, CourtStatusModel> statuses) {
     final available = courts
         .where((c) => statuses[c.id]?.statusType.label == 'Available')
         .length;
     final inUse = courts.length - available;
+
+    final allRes = context.watch<ReservationProvider>().allReservations;
+    final today = DateTime.now();
+    final todayRevenue = allRes
+        .where((r) =>
+            r.status != 'cancelled' &&
+            r.startTime.year == today.year &&
+            r.startTime.month == today.month &&
+            r.startTime.day == today.day)
+        .fold<double>(0.0, (s, r) => s + r.amount);
 
     return Row(
       children: [
@@ -422,7 +638,7 @@ class AdminDashboardScreen extends StatelessWidget {
             color: AppTheme.accent,
           ),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 8),
         Expanded(
           child: _StatCard(
             icon: Icons.check_circle_outline,
@@ -431,13 +647,31 @@ class AdminDashboardScreen extends StatelessWidget {
             color: AppTheme.statusAvailable,
           ),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 8),
         Expanded(
           child: _StatCard(
             icon: Icons.people_alt_outlined,
             value: inUse.toString(),
             label: 'In Use',
             color: AppTheme.statusInUse,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: GestureDetector(
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const AdminRevenueAnalyticsScreen(),
+                ),
+              );
+            },
+            child: _StatCard(
+              icon: Icons.payments_rounded,
+              value: '₱${todayRevenue.toStringAsFixed(0)}',
+              label: "Today's Income",
+              color: const Color(0xFF10B981),
+            ),
           ),
         ),
       ],

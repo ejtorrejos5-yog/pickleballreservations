@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'package:intl/intl.dart';
 import '../models/user_model.dart';
 import '../models/court_model.dart';
 import '../models/court_status_model.dart';
@@ -133,6 +134,103 @@ class MockDatabase {
           createdAt: DateTime.now(),
         ),
       );
+    }
+
+    if (reservations.isEmpty) {
+      final now = DateTime.now();
+      final sampleRes = [
+        ReservationModel(
+          id: 'res_sample_1',
+          courtId: 'court_1',
+          courtName: 'Court A',
+          userId: 'walk_in_101',
+          userName: 'Mark Bautista (Walk-In)',
+          date: DateFormat('yyyy-MM-dd').format(now),
+          startTime: DateTime(now.year, now.month, now.day, 9, 0),
+          endTime: DateTime(now.year, now.month, now.day, 10, 0),
+          status: 'completed',
+          createdAt: now.subtract(const Duration(hours: 4)),
+          paymentMethod: 'cash',
+          paymentReference: 'WALK-748291',
+          amount: 300.0,
+        ),
+        ReservationModel(
+          id: 'res_sample_2',
+          courtId: 'court_2',
+          courtName: 'Court B',
+          userId: 'user_sample_2',
+          userName: 'Sarah Jenkins',
+          date: DateFormat('yyyy-MM-dd').format(now),
+          startTime: DateTime(now.year, now.month, now.day, 14, 0),
+          endTime: DateTime(now.year, now.month, now.day, 16, 0),
+          status: 'confirmed',
+          createdAt: now.subtract(const Duration(hours: 2)),
+          paymentMethod: 'paymongo',
+          paymentReference: 'pay_92817293',
+          amount: 700.0,
+        ),
+        ReservationModel(
+          id: 'res_sample_3',
+          courtId: 'court_3',
+          courtName: 'Court C',
+          userId: 'walk_in_102',
+          userName: 'Derrick Tan (Walk-In)',
+          date: DateFormat('yyyy-MM-dd').format(now.subtract(const Duration(days: 1))),
+          startTime: DateTime(now.year, now.month, now.day - 1, 15, 0),
+          endTime: DateTime(now.year, now.month, now.day - 1, 17, 0),
+          status: 'completed',
+          createdAt: now.subtract(const Duration(days: 1)),
+          paymentMethod: 'walk_in_gcash',
+          paymentReference: 'GC-9938217',
+          amount: 500.0,
+        ),
+        ReservationModel(
+          id: 'res_sample_4',
+          courtId: 'court_1',
+          courtName: 'Court A',
+          userId: 'user_sample_3',
+          userName: 'Alex Rivera',
+          date: DateFormat('yyyy-MM-dd').format(now.subtract(const Duration(days: 2))),
+          startTime: DateTime(now.year, now.month, now.day - 2, 10, 0),
+          endTime: DateTime(now.year, now.month, now.day - 2, 11, 0),
+          status: 'completed',
+          createdAt: now.subtract(const Duration(days: 2)),
+          paymentMethod: 'manual_gcash',
+          paymentReference: 'GC-1029384',
+          amount: 300.0,
+        ),
+        ReservationModel(
+          id: 'res_sample_5',
+          courtId: 'court_4',
+          courtName: 'Court D',
+          userId: 'walk_in_103',
+          userName: 'Elena Reyes (Walk-In)',
+          date: DateFormat('yyyy-MM-dd').format(now.subtract(const Duration(days: 3))),
+          startTime: DateTime(now.year, now.month, now.day - 3, 18, 0),
+          endTime: DateTime(now.year, now.month, now.day - 3, 20, 0),
+          status: 'completed',
+          createdAt: now.subtract(const Duration(days: 3)),
+          paymentMethod: 'cash',
+          paymentReference: 'WALK-109283',
+          amount: 500.0,
+        ),
+        ReservationModel(
+          id: 'res_sample_6',
+          courtId: 'court_2',
+          courtName: 'Court B',
+          userId: 'user_sample_4',
+          userName: 'Carlo Mendoza',
+          date: DateFormat('yyyy-MM-dd').format(now.subtract(const Duration(days: 5))),
+          startTime: DateTime(now.year, now.month, now.day - 5, 16, 0),
+          endTime: DateTime(now.year, now.month, now.day - 5, 18, 0),
+          status: 'completed',
+          createdAt: now.subtract(const Duration(days: 5)),
+          paymentMethod: 'walk_in_maya',
+          paymentReference: 'MY-8291038',
+          amount: 700.0,
+        ),
+      ];
+      reservations.addAll(sampleRes);
     }
     publishAll();
     _startSimulation();

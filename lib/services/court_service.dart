@@ -2,6 +2,7 @@ import 'package:firebase_database/firebase_database.dart';
 import '../models/court_status_model.dart';
 import '../core/constants/app_constants.dart';
 import 'mock_database.dart';
+import 'lcd_service.dart';
 
 class CourtService {
   final FirebaseDatabase _db = FirebaseDatabase.instance;
@@ -125,6 +126,10 @@ class CourtService {
 
     try {
       await _db.ref('lcd_override/$courtId').update({'enabled': false});
+    } catch (_) {}
+
+    try {
+      await LcdService.logAvailable(courtId: courtId);
     } catch (_) {}
   }
 

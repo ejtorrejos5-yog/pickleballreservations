@@ -79,7 +79,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
       if (mounted) {
         setState(() {
           _isLoadingLink = false;
-          _errorMessage = kIsWeb
+          _errorMessage = (kIsWeb && !PaymongoService.isMobileDevice)
               ? 'Could not connect to PayMongo.\n\nRun the web launcher to auto-start everything:\n  .\\run_web.ps1\n\nOR manually start the proxy:\n  dart run bin/cors_proxy.dart'
               : 'Could not connect to PayMongo. Please check your internet connection and try again.';
         });

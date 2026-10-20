@@ -12,6 +12,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/utils/date_helpers.dart';
 import '../../core/constants/app_constants.dart';
 import '../../widgets/reschedule_dialog.dart';
+import 'admin_walk_in_dialog.dart';
 
 class AdminCourtScheduleScreen extends StatefulWidget {
   final CourtModel court;
@@ -60,6 +61,11 @@ class _AdminCourtScheduleScreenState extends State<AdminCourtScheduleScreen> {
           ),
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.point_of_sale_rounded, color: Color(0xFF10B981)),
+            tooltip: 'Book Walk-In for this Court',
+            onPressed: () => AdminWalkInDialog.show(context, court: _court),
+          ),
           IconButton(
             icon: const Icon(Icons.edit_rounded, color: AppTheme.primary),
             tooltip: 'Edit Court Info',

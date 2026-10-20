@@ -15,7 +15,7 @@ extension CourtStatusTypeExt on CourtStatusType {
 
 class CourtStatusModel {
   final String courtId;
-  final bool isOccupied;
+  final bool _isOccupiedRaw;
   final DateTime? occupiedSince;
   final DateTime? bookedUntil;
   final String? reservationId;
@@ -25,17 +25,36 @@ class CourtStatusModel {
 
   const CourtStatusModel({
     required this.courtId,
-    required this.isOccupied,
+    required bool isOccupied,
     this.occupiedSince,
     this.bookedUntil,
     this.reservationId,
     this.reservedByName,
     this.nextPlayerName,
-  });
+  }) : _isOccupiedRaw = isOccupied;
+
+  /// True if the session has reached or passed its booked end time.
+  bool get isExpired {
+    if (bookedUntil == null) return false;
+    return !bookedUntil!.isAfter(DateTime.now());
+  }
+
+  /// Whether the court is currently occupied.
+  /// If the player's time has expired, it is no longer occupied.
+  bool get isOccupied => _isOccupiedRaw && !isExpired;
+
+  /// Underlying raw flag from the database or hardware.
+  bool get isOccupiedRaw => _isOccupiedRaw;
 
   CourtStatusType get statusType {
-    if (isOccupied) return CourtStatusType.inUse;
-    if (reservationId != null && bookedUntil != null &&
+    if (isExpired) {
+      return CourtStatusType.available;
+    }
+    if (_isOccupiedRaw) {
+      return CourtStatusType.inUse;
+    }
+    if (reservationId != null &&
+        bookedUntil != null &&
         bookedUntil!.isAfter(DateTime.now())) {
       return CourtStatusType.reserved;
     }
@@ -43,13 +62,13 @@ class CourtStatusModel {
   }
 
   int get secondsRemaining {
-    if (bookedUntil == null) return 0;
+    if (bookedUntil == null || isExpired) return 0;
     final diff = bookedUntil!.difference(DateTime.now());
     return diff.isNegative ? 0 : diff.inSeconds;
   }
 
   double get progressFraction {
-    if (occupiedSince == null || bookedUntil == null) return 0.0;
+    if (occupiedSince == null || bookedUntil == null || isExpired) return 0.0;
     final total = bookedUntil!.difference(occupiedSince!).inSeconds;
     if (total <= 0) return 0.0;
     final elapsed = DateTime.now().difference(occupiedSince!).inSeconds;
