@@ -77,6 +77,7 @@ class CourtService {
     String? reservedByName,
     DateTime? bookedUntil,
     DateTime? occupiedSince,
+    bool forceOverride = false,
   }) async {
     if (AppConstants.isMockMode) {
       MockDatabase.courtStatuses[courtId] = CourtStatusModel(
@@ -89,6 +90,42 @@ class CourtService {
       );
       MockDatabase.publishAll();
       return;
+    }
+
+    // ── Protection for Ongoing Session ─────────────────────────────────────────
+    // If court is currently occupied and current player's time has NOT expired,
+    // do NOT overwrite the active player! Queue this new booking as nextPlayerName.
+    if (!forceOverride) {
+      try {
+        final snap =
+            await _db.ref('${AppConstants.courtStatusPath}/$courtId').get();
+        if (snap.exists && snap.value != null) {
+          final current = Map<dynamic, dynamic>.from(snap.value as Map);
+          final currentOccupied = current['isOccupied'] as bool? ?? false;
+          final currentBookedUntil = current['bookedUntil'] as int?;
+          final currentName = (current['reservedByName'] ?? '').toString();
+          final nowMs = DateTime.now().millisecondsSinceEpoch;
+
+          final bool isCurrentSessionActive = currentOccupied &&
+              currentBookedUntil != null &&
+              currentBookedUntil > nowMs;
+
+          if (isCurrentSessionActive) {
+            // If the incoming booking is for a different player (or next time slot)
+            if (reservedByName != null &&
+                reservedByName.isNotEmpty &&
+                reservedByName != currentName) {
+              await _db.ref('${AppConstants.courtStatusPath}/$courtId').update({
+                'nextPlayerName': reservedByName,
+                'nextReservationId': reservationId,
+                'nextBookedUntil': bookedUntil?.millisecondsSinceEpoch,
+              });
+            }
+            // Do not overwrite active player's screen/countdown!
+            return;
+          }
+        }
+      } catch (_) {}
     }
 
     await _db
@@ -105,6 +142,45 @@ class CourtService {
     try {
       await _db.ref('lcd_override/$courtId').update({'enabled': false});
     } catch (_) {}
+  }
+
+  /// Promotes the queued next player to active session once the previous player's time is up.
+  Future<bool> promoteNextPlayer(String courtId) async {
+    if (AppConstants.isMockMode) return false;
+    try {
+      final snap =
+          await _db.ref('${AppConstants.courtStatusPath}/$courtId').get();
+      if (!snap.exists || snap.value == null) return false;
+
+      final current = Map<dynamic, dynamic>.from(snap.value as Map);
+      final nextPlayer = current['nextPlayerName']?.toString();
+      if (nextPlayer == null || nextPlayer.isEmpty) {
+        await clearCourtStatus(courtId);
+        return false;
+      }
+
+      final nextBookedUntil = current['nextBookedUntil'] as int?;
+      final nextResId = current['nextReservationId']?.toString();
+      final now = DateTime.now();
+      final endTime = nextBookedUntil != null &&
+              nextBookedUntil > now.millisecondsSinceEpoch
+          ? DateTime.fromMillisecondsSinceEpoch(nextBookedUntil)
+          : now.add(const Duration(hours: 1));
+
+      await _db.ref('${AppConstants.courtStatusPath}/$courtId').set({
+        'isOccupied': true,
+        'reservationId': nextResId,
+        'reservedByName': nextPlayer,
+        'bookedUntil': endTime.millisecondsSinceEpoch,
+        'occupiedSince': now.millisecondsSinceEpoch,
+        'nextPlayerName': null,
+        'nextReservationId': null,
+        'nextBookedUntil': null,
+      });
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   // ─── Clear Status (on cancel / timeout) ──────────────────────────────────────

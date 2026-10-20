@@ -104,15 +104,28 @@ class ReservationProvider extends ChangeNotifier {
       );
       final docId = await _firestoreService.createReservation(reservation);
 
-      // 3. Update Realtime DB (reserved — not yet occupied)
+      // 3. Update Realtime DB:
+      // Only update IoT court status if this reservation is for today.
+      // If the court is already occupied, CourtService will safely queue it as nextPlayerName.
       try {
-        await _courtService.updateCourtStatus(
-          courtId: court.id,
-          isOccupied: false,
-          reservationId: docId,
-          reservedByName: userName,
-          bookedUntil: endTime,
-        );
+        final now = DateTime.now();
+        final isToday = startTime.year == now.year &&
+            startTime.month == now.month &&
+            startTime.day == now.day;
+
+        if (isToday) {
+          final isStartingNow =
+              startTime.isBefore(now.add(const Duration(minutes: 5))) &&
+                  endTime.isAfter(now);
+
+          await _courtService.updateCourtStatus(
+            courtId: court.id,
+            isOccupied: isStartingNow,
+            reservationId: docId,
+            reservedByName: userName,
+            bookedUntil: endTime,
+          );
+        }
       } catch (e) {
         debugPrint('Warning: Realtime DB update failed: $e');
       }

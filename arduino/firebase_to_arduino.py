@@ -248,6 +248,12 @@ def main():
     last_heartbeat    = 0
     last_synced_rem   = -1
 
+    # Active session state to protect the current player until their time finishes
+    active_player            = None
+    active_booked_until      = 0
+    queued_next_player       = None
+    queued_next_booked_until = 0
+
     print(f"[Bridge] Active! Monitoring {display_name} in Firebase...")
     print("[Bridge] Press Ctrl+C in this terminal to stop.\n")
 
@@ -277,11 +283,104 @@ def main():
             override = fetch_lcd_override(court_id, alt_ids)
             data     = fetch_court_status(court_id, alt_ids)
 
-            is_occupied = data is not None and data.get("isOccupied", False)
-            player_name  = (data.get("reservedByName") or "Player").strip() if is_occupied else ""
-            booked_until = data.get("bookedUntil", 0) if is_occupied else 0
-            occupied_since = data.get("occupiedSince", 0) if is_occupied else 0
-            next_player  = (data.get("nextPlayerName") or "").strip() if is_occupied else ""
+            incoming_occupied  = data is not None and data.get("isOccupied", False)
+            incoming_player    = (data.get("reservedByName") or "").strip() if data else ""
+            incoming_end       = data.get("bookedUntil", 0) if data else 0
+            occupied_since     = data.get("occupiedSince", 0) if data else 0
+            incoming_next      = (data.get("nextPlayerName") or "").strip() if data else ""
+            incoming_next_end  = data.get("nextBookedUntil", 0) if data else 0
+
+            # Update queued next player from Firebase if provided
+            if incoming_next and not queued_next_player:
+                queued_next_player = incoming_next
+                queued_next_booked_until = incoming_next_end
+
+            # Admin explicitly cleared or forced court to Available
+            if data is not None and not incoming_occupied and not incoming_player:
+                if active_player is not None:
+                    print(f"[Bridge] Court was cleared/forced to Available by admin.")
+                active_player = None
+                active_booked_until = 0
+                queued_next_player = None
+                queued_next_booked_until = 0
+
+            # ── SESSION SUCCESSION LOGIC ──────────────────────────────────────────
+            # Rule: Current player MUST finish their booked time before proceeding
+            # to any newly booked player for the next slot.
+
+            if active_player is not None:
+                # Case A: Current player's booked time has FINISHED
+                if now_ms >= active_booked_until:
+                    print(f"\n[Bridge] ⏱ Time finished for {active_player} on {display_name}!")
+                    
+                    if queued_next_player:
+                        # Proceed directly to the next booked player!
+                        print(f"[Bridge] >> Proceeding to next booked player: {queued_next_player}")
+                        active_player = queued_next_player
+                        active_booked_until = queued_next_booked_until if queued_next_booked_until > now_ms else (now_ms + 3600000)
+                        queued_next_player = None
+                        queued_next_booked_until = 0
+
+                        # Update Firebase Realtime DB with the new active player
+                        try:
+                            requests.patch(f"{FIREBASE_DB_URL}/court_status/{court_id}.json", json={
+                                "isOccupied": True,
+                                "reservedByName": active_player,
+                                "bookedUntil": active_booked_until,
+                                "occupiedSince": now_ms,
+                                "nextPlayerName": None,
+                                "nextReservationId": None,
+                                "nextBookedUntil": None,
+                            }, timeout=2)
+                        except Exception:
+                            pass
+
+                        last_state_key = None  # Force immediate check-in update on Arduino
+                    else:
+                        # No queued player - Court is now available
+                        print(f"[Bridge] >> No upcoming player in queue. Setting {display_name} to AVAILABLE.")
+                        active_player = None
+                        active_booked_until = 0
+                        try:
+                            requests.patch(f"{FIREBASE_DB_URL}/court_status/{court_id}.json", json={
+                                "isOccupied": False,
+                                "reservationId": None,
+                                "reservedByName": None,
+                                "bookedUntil": None,
+                                "occupiedSince": None,
+                                "nextPlayerName": None,
+                            }, timeout=2)
+                        except Exception:
+                            pass
+
+                # Case B: Current player is STILL PLAYING (time not yet finished)
+                else:
+                    # If Firebase received a new booking for another player:
+                    if incoming_occupied and incoming_player and incoming_player != active_player:
+                        if queued_next_player != incoming_player:
+                            queued_next_player = incoming_player
+                            queued_next_booked_until = incoming_end
+                            print(f"[Bridge] Current player {active_player} still has time! Queued {incoming_player} for next slot.")
+                    
+                    # If admin extended the active player's time
+                    elif incoming_player == active_player and incoming_end > active_booked_until:
+                        print(f"[Bridge] Extended time for {active_player}: +{(incoming_end - active_booked_until)//60000} mins")
+                        active_booked_until = incoming_end
+
+            else:
+                # No active player yet: adopt incoming player if court is occupied
+                if incoming_occupied and incoming_player and incoming_end > now_ms:
+                    active_player = incoming_player
+                    active_booked_until = incoming_end
+                    if incoming_next:
+                        queued_next_player = incoming_next
+                        queued_next_booked_until = incoming_next_end
+
+            # Current effective court status
+            is_occupied = active_player is not None and active_booked_until > now_ms
+            player_name = active_player if is_occupied else ""
+            booked_until = active_booked_until if is_occupied else 0
+            next_player  = (queued_next_player or "").strip()
             rem_seconds  = max(0, int((booked_until - now_ms) / 1000)) if is_occupied else 0
 
             # Determine if this is a genuine custom message (not just empty or default court name)
@@ -303,7 +402,7 @@ def main():
                     pass
 
             # PRIORITY RULE:
-            # If an active player check-in is running (isOccupied == True and rem_seconds > 0):
+            # If an active player check-in is running:
             # Show the live countdown unless the admin deliberately created a new custom override AFTER check-in
             show_custom = False
             if is_real_custom:

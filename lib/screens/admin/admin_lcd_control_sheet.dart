@@ -250,6 +250,7 @@ class _AdminLcdControlSheetState extends State<AdminLcdControlSheet> {
         reservedByName: name,
         bookedUntil: endTime,
         occupiedSince: DateTime.now(),
+        forceOverride: true,
       );
       await LcdService.logCheckIn(
         courtId: widget.court.id,
@@ -297,6 +298,7 @@ class _AdminLcdControlSheetState extends State<AdminLcdControlSheet> {
         reservedByName: name,
         bookedUntil: newEnd,
         occupiedSince: _status.occupiedSince ?? DateTime.now(),
+        forceOverride: true,
       );
       await LcdService.logCheckIn(
         courtId: widget.court.id,
@@ -364,6 +366,7 @@ class _AdminLcdControlSheetState extends State<AdminLcdControlSheet> {
         reservedByName: playerName,
         bookedUntil: endTime,
         occupiedSince: DateTime.now(),
+        forceOverride: true,
       );
       await LcdService.logCheckIn(
         courtId: widget.court.id,
