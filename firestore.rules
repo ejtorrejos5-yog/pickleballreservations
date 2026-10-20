@@ -41,9 +41,8 @@ service cloud.firestore {
 
     // ── Tournaments ──────────────────────────────────────────────────────────
     match /tournaments/{tourId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
-      allow update: if isAuthenticated();
+      allow read: if true;
+      allow create, update: if true;
       allow delete: if isAuthenticated() &&
                        (resource.data.creatorId == request.auth.uid || isAdmin());
     }
