@@ -13,6 +13,7 @@ import '../../core/utils/date_helpers.dart';
 import '../../core/constants/app_constants.dart';
 import '../../widgets/reschedule_dialog.dart';
 import 'admin_walk_in_dialog.dart';
+import 'admin_lcd_control_sheet.dart';
 
 class AdminCourtScheduleScreen extends StatefulWidget {
   final CourtModel court;
@@ -61,6 +62,15 @@ class _AdminCourtScheduleScreenState extends State<AdminCourtScheduleScreen> {
           ),
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.timer_rounded, color: Color(0xFF00E676)),
+            tooltip: 'LCD Timer & Display Control',
+            onPressed: () => AdminLcdControlSheet.show(
+              context,
+              court: _court,
+              status: widget.status,
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.point_of_sale_rounded, color: Color(0xFF10B981)),
             tooltip: 'Book Walk-In for this Court',
@@ -322,6 +332,26 @@ class _AdminCourtScheduleScreenState extends State<AdminCourtScheduleScreen> {
                           color: AppTheme.statusInUse,
                           fontSize: 12,
                           fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  TextButton.icon(
+                    icon: const Icon(Icons.timer_rounded, size: 14, color: Color(0xFF00E676)),
+                    label: const Text('Display Timer',
+                        style: TextStyle(
+                            color: Color(0xFF00E676),
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold)),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    onPressed: () => AdminLcdControlSheet.show(
+                      context,
+                      court: _court,
+                      status: widget.status,
                     ),
                   ),
                 ],

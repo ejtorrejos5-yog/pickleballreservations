@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../models/court_model.dart';
@@ -7,11 +8,12 @@ import '../../services/lcd_service.dart';
 import '../../core/theme/app_theme.dart';
 
 /// Bottom sheet that gives the admin full manual control over what a court's
-/// LCD display shows.  Covers four actions:
-///   1. Set a custom 2-line message (stored in lcd_override/{courtId})
-///   2. Set the "Next Player" name (stored in court_status/{courtId})
-///   3. Force the court to Available (clears court_status)
-///   4. Force the court to Occupied (manual check-in with duration)
+/// LCD display shows.  Covers five actions:
+///   1. Display Timer directly on the LCD (live countdown clock)
+///   2. Set a custom 2-line message (stored in lcd_override/{courtId})
+///   3. Set the "Next Player" name (stored in court_status/{courtId})
+///   4. Force the court to Available (clears court_status)
+///   5. Force the court to Occupied (manual check-in with duration)
 class AdminLcdControlSheet extends StatefulWidget {
   final CourtModel court;
   final CourtStatusModel status;
@@ -43,6 +45,9 @@ class _AdminLcdControlSheetState extends State<AdminLcdControlSheet> {
   // ── expansion state ──
   _ActivePanel _open = _ActivePanel.none;
 
+  // ── live timer ticker ──
+  Timer? _tickTimer;
+
   // ── custom message ──
   final _line1Ctrl = TextEditingController();
   final _line2Ctrl = TextEditingController();
@@ -52,7 +57,7 @@ class _AdminLcdControlSheetState extends State<AdminLcdControlSheet> {
   final _nextCtrl = TextEditingController();
   bool _savingNext = false;
 
-  // ── force occupied ──
+  // ── force occupied / timer ──
   final _playerCtrl = TextEditingController();
   final _minutesCtrl = TextEditingController(text: '60');
   bool _savingOccupied = false;
@@ -68,16 +73,21 @@ class _AdminLcdControlSheetState extends State<AdminLcdControlSheet> {
     super.initState();
     _status = widget.status;
     _nextCtrl.text = _status.nextPlayerName ?? '';
+    _playerCtrl.text = _status.reservedByName ?? '';
     _line1Ctrl.text = widget.court.name.toUpperCase();
     _line2Ctrl.text = '';
     LcdService.setActiveCourt(
       courtId: widget.court.id,
       courtName: widget.court.name,
     );
+    _tickTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
   void dispose() {
+    _tickTimer?.cancel();
     _line1Ctrl.dispose();
     _line2Ctrl.dispose();
     _nextCtrl.dispose();
@@ -210,6 +220,111 @@ class _AdminLcdControlSheetState extends State<AdminLcdControlSheet> {
     }
   }
 
+  Future<void> _displayTimerOnLcd({int? durationMinutes, String? playerName}) async {
+    setState(() => _savingOccupied = true);
+    try {
+      // If currently occupied and no new duration requested, restore live countdown display
+      if (_status.isOccupied && durationMinutes == null) {
+        await LcdService.clearOverride(courtId: widget.court.id);
+        await LcdService.restartLcd(courtId: widget.court.id);
+        _showSnack('LCD set to display live countdown timer! ⏱️');
+        setState(() => _open = _ActivePanel.none);
+        return;
+      }
+
+      final mins = durationMinutes ?? int.tryParse(_minutesCtrl.text.trim()) ?? 60;
+      if (mins <= 0) {
+        _showSnack('Enter valid minutes', error: true);
+        return;
+      }
+
+      final name = (playerName ?? _playerCtrl.text.trim()).isNotEmpty
+          ? (playerName ?? _playerCtrl.text.trim())
+          : (_status.reservedByName?.isNotEmpty == true ? _status.reservedByName! : 'Player');
+
+      final endTime = DateTime.now().add(Duration(minutes: mins));
+
+      await CourtService().updateCourtStatus(
+        courtId: widget.court.id,
+        isOccupied: true,
+        reservedByName: name,
+        bookedUntil: endTime,
+        occupiedSince: DateTime.now(),
+      );
+      await LcdService.logCheckIn(
+        courtId: widget.court.id,
+        playerName: name,
+        endTime: endTime,
+      );
+      await LcdService.clearOverride(courtId: widget.court.id);
+      await LcdService.restartLcd(courtId: widget.court.id);
+
+      _showSnack('Timer ($mins min) active! Displayed on LCD ⏱️');
+      setState(() {
+        _status = CourtStatusModel(
+          courtId: widget.court.id,
+          isOccupied: true,
+          reservedByName: name,
+          bookedUntil: endTime,
+          occupiedSince: DateTime.now(),
+          nextPlayerName: _status.nextPlayerName,
+        );
+        _open = _ActivePanel.none;
+      });
+    } catch (e) {
+      _showSnack('Error: $e', error: true);
+    } finally {
+      if (mounted) setState(() => _savingOccupied = false);
+    }
+  }
+
+  Future<void> _addTimerMinutes(int additionalMinutes) async {
+    if (!_status.isOccupied || _status.bookedUntil == null) {
+      await _displayTimerOnLcd(durationMinutes: additionalMinutes);
+      return;
+    }
+    setState(() => _savingOccupied = true);
+    try {
+      final currentEnd = _status.bookedUntil!.isAfter(DateTime.now())
+          ? _status.bookedUntil!
+          : DateTime.now();
+      final newEnd = currentEnd.add(Duration(minutes: additionalMinutes));
+      final name = _status.reservedByName ?? 'Player';
+
+      await CourtService().updateCourtStatus(
+        courtId: widget.court.id,
+        isOccupied: true,
+        reservedByName: name,
+        bookedUntil: newEnd,
+        occupiedSince: _status.occupiedSince ?? DateTime.now(),
+      );
+      await LcdService.logCheckIn(
+        courtId: widget.court.id,
+        playerName: name,
+        endTime: newEnd,
+      );
+      await LcdService.clearOverride(courtId: widget.court.id);
+      await LcdService.restartLcd(courtId: widget.court.id);
+
+      final remMin = newEnd.difference(DateTime.now()).inMinutes;
+      _showSnack('+$additionalMinutes mins added! New timer: $remMin mins remaining ⏱️');
+      setState(() {
+        _status = CourtStatusModel(
+          courtId: widget.court.id,
+          isOccupied: true,
+          reservedByName: name,
+          bookedUntil: newEnd,
+          occupiedSince: _status.occupiedSince ?? DateTime.now(),
+          nextPlayerName: _status.nextPlayerName,
+        );
+      });
+    } catch (e) {
+      _showSnack('Error: $e', error: true);
+    } finally {
+      if (mounted) setState(() => _savingOccupied = false);
+    }
+  }
+
   Future<void> _forceAvailable() async {
     setState(() => _savingAvailable = true);
     try {
@@ -315,7 +430,9 @@ class _AdminLcdControlSheetState extends State<AdminLcdControlSheet> {
                   const SizedBox(height: 12),
                   _buildLcdPreview(),
                   const SizedBox(height: 20),
-                  _buildSectionLabel('MANUAL OVERRIDES'),
+                  _buildSectionLabel('TIMER & DISPLAY CONTROLS'),
+                  const SizedBox(height: 10),
+                  _buildDisplayTimerTile(),
                   const SizedBox(height: 10),
                   _buildCustomMessageTile(),
                   const SizedBox(height: 10),
@@ -570,6 +687,55 @@ class _AdminLcdControlSheetState extends State<AdminLcdControlSheet> {
           _lcdLine(_previewRow0),
           const SizedBox(height: 4),
           _lcdLine(_previewRow1),
+          const SizedBox(height: 12),
+          // Action button row for Timer display
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.timer_rounded, size: 16),
+                  label: Text(
+                    _status.isOccupied ? 'Display Timer (Live)' : 'Display Timer',
+                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF00E676),
+                    foregroundColor: const Color(0xFF041804),
+                    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: _savingOccupied
+                      ? null
+                      : () {
+                          if (_status.isOccupied) {
+                            _displayTimerOnLcd();
+                          } else {
+                            setState(() => _open = _ActivePanel.displayTimer);
+                          }
+                        },
+                ),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.restart_alt_rounded, size: 15, color: Color(0xFF00E676)),
+                label: const Text('Refresh LCD',
+                    style: TextStyle(
+                        color: Color(0xFF00E676),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600)),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Color(0xFF1B5E20)),
+                  backgroundColor: const Color(0xFF061A08),
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+                onPressed: _restartLcd,
+              ),
+            ],
+          ),
         ],
       ),
     ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.05, end: 0, duration: 400.ms);
@@ -604,6 +770,201 @@ class _AdminLcdControlSheetState extends State<AdminLcdControlSheet> {
         fontSize: 10,
         fontWeight: FontWeight.w700,
         letterSpacing: 1.4,
+      ),
+    );
+  }
+
+  // ── Display Timer Tile ───────────────────────────────────────────────────────
+
+  Widget _buildDisplayTimerTile() {
+    final isOpen = _open == _ActivePanel.displayTimer;
+    final isOccupied = _status.isOccupied;
+    final remSec = _status.secondsRemaining;
+    final remMin = (remSec / 60).ceil();
+
+    return _ActionTile(
+      icon: Icons.timer_rounded,
+      iconColor: const Color(0xFF00E676),
+      title: 'Display Timer on LCD',
+      subtitle: isOccupied
+          ? 'Live timer running: $remMin mins remaining'
+          : 'Set countdown duration & display live timer on LCD',
+      isExpanded: isOpen,
+      onHeaderTap: () => setState(
+          () => _open = isOpen ? _ActivePanel.none : _ActivePanel.displayTimer),
+      expandedContent: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (isOccupied) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF00E676).withOpacity(0.12),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFF00E676).withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.alarm_on_rounded, color: Color(0xFF00E676), size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Running: ${_status.reservedByName ?? "Player"} · $remMin min left',
+                      style: const TextStyle(
+                        color: Color(0xFF00E676),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _savingOccupied ? null : () => _displayTimerOnLcd(),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text('Show on LCD',
+                        style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF00E676))),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'Add More Time to Timer:',
+              style: TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Expanded(child: _buildTimeChip('+15 min', 15, isAdd: true)),
+                const SizedBox(width: 6),
+                Expanded(child: _buildTimeChip('+30 min', 30, isAdd: true)),
+                const SizedBox(width: 6),
+                Expanded(child: _buildTimeChip('+60 min', 60, isAdd: true)),
+              ],
+            ),
+            const SizedBox(height: 14),
+            const Divider(color: AppTheme.cardBorder, height: 1),
+            const SizedBox(height: 14),
+          ],
+          const Text(
+            'Quick Duration Presets:',
+            style: TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 11,
+                fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [15, 30, 45, 60, 90, 120].map((mins) {
+              final isSelected = _minutesCtrl.text == mins.toString();
+              return InkWell(
+                onTap: () => setState(() => _minutesCtrl.text = mins.toString()),
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? const Color(0xFF00E676).withOpacity(0.2)
+                        : AppTheme.cardBorder.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isSelected
+                          ? const Color(0xFF00E676)
+                          : AppTheme.cardBorder,
+                    ),
+                  ),
+                  child: Text(
+                    '$mins mins',
+                    style: TextStyle(
+                      color: isSelected
+                          ? const Color(0xFF00E676)
+                          : AppTheme.textSecondary,
+                      fontSize: 12,
+                      fontWeight:
+                          isSelected ? FontWeight.w700 : FontWeight.w500,
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 12),
+          _lcdTextField(
+            controller: _playerCtrl,
+            label: 'Player / Team Name',
+            hint: 'e.g. Gabriel',
+            maxLength: 12,
+          ),
+          const SizedBox(height: 10),
+          _lcdTextField(
+            controller: _minutesCtrl,
+            label: 'Timer Duration (minutes)',
+            hint: 'e.g. 60',
+            maxLength: 4,
+            keyboardType: TextInputType.number,
+          ),
+          const SizedBox(height: 14),
+          ElevatedButton.icon(
+            icon: _savingOccupied
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Color(0xFF051B07)),
+                  )
+                : const Icon(Icons.timer_rounded, size: 18),
+            label: Text(
+              isOccupied
+                  ? 'Update & Display Timer on LCD'
+                  : 'Display Timer on LCD',
+              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF00E676),
+              foregroundColor: const Color(0xFF051B07),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: _savingOccupied ? null : () => _displayTimerOnLcd(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimeChip(String label, int mins, {bool isAdd = false}) {
+    return OutlinedButton(
+      style: OutlinedButton.styleFrom(
+        side: const BorderSide(color: Color(0xFF00E676)),
+        backgroundColor: const Color(0xFF00E676).withOpacity(0.08),
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+      onPressed: _savingOccupied
+          ? null
+          : () => isAdd
+              ? _addTimerMinutes(mins)
+              : _displayTimerOnLcd(durationMinutes: mins),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Color(0xFF00E676),
+          fontWeight: FontWeight.w700,
+          fontSize: 11.5,
+        ),
       ),
     );
   }
@@ -882,7 +1243,7 @@ class _AdminLcdControlSheetState extends State<AdminLcdControlSheet> {
 
 // ─── Supporting types ────────────────────────────────────────────────────────
 
-enum _ActivePanel { none, custom, nextPlayer, forceOccupied }
+enum _ActivePanel { none, displayTimer, custom, nextPlayer, forceOccupied }
 
 class _ActionTile extends StatelessWidget {
   final IconData icon;
